@@ -20,7 +20,7 @@ jobs:
 
           # requires 20.04 because ironfish depends on openssl 1.1.1, new ubuntu only allows 3.x
           - host: ubuntu-20.04
-            arch: x86_64
+            arch: amd64
             system: linux
 
           # currently no way to build arm64
@@ -32,7 +32,7 @@ jobs:
           # - host: ubuntu-20.04
           #   target: aarch64-apple-darwin
 
-    name: Build ${{ matrix.settings.target }}
+    name: Build ${{ matrix.settings.system }} ${{ matrix.settings.arch }}
     runs-on: ${{ matrix.settings.host }}
     steps:
 
@@ -48,11 +48,11 @@ jobs:
         run: npm install ironfish caxa@3.0.1
 
       - name: caxa package
-        run: npx caxa --input . --output ${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} -- "{{caxa}}/node_modules/.bin/node" "--enable-source-maps" "{{caxa}}/node_modules/ironfish/bin/run"
+        run: ls -R | grep node-datachannel && npx caxa --input . --output ${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} -- "{{caxa}}/node_modules/.bin/node" "--enable-source-maps" "{{caxa}}/node_modules/ironfish/bin/run"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.settings.system }}-${{ matrix.settings.arch }}
+          name: ironfish-${{ matrix.settings.system }}-${{ matrix.settings.arch }}
           path: ${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} 
           if-no-files-found: error
