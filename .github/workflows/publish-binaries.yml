@@ -23,36 +23,66 @@ jobs:
             arch: amd64
             system: linux
 
-          # currently no way to build arm64
-          # - host: ubuntu-20.04
-          #   arch: aarch64
-          #   system: linux
-          
-
-          # - host: ubuntu-20.04
-          #   target: aarch64-apple-darwin
-
     name: Build ${{ matrix.settings.system }} ${{ matrix.settings.arch }}
     runs-on: ${{ matrix.settings.host }}
     steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+
+      - name: Cli Version Extraction
+        uses: nyaa8/package-version@v1
+        with:
+          path: 'ironfish-cli/package.json'
 
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18.12.1'
+      
+      - name: Make temp dir
+        run: |
+          mkdir ${{ runner.temp }}/iron
+          mkdir ${{ runner.temp }}/iron/binary
 
       - name: npm init
+        working-directory: ${{ runner.temp }}/iron
         run: npm init -y
       
       - name: install dependencies
-        run: npm install ironfish caxa@3.0.1
+        working-directory: ${{ runner.temp }}/iron
+        run: npm install ironfish && npm install -g caxa
 
       - name: caxa package
-        run: ls -R | grep node-datachannel && npx caxa --input . --output ${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} -- "{{caxa}}/node_modules/.bin/node" "--enable-source-maps" "{{caxa}}/node_modules/ironfish/bin/run"
+        working-directory: ${{ runner.temp }}/iron
+        run: caxa --input . --output binary/${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} -- "{{caxa}}/node_modules/.bin/node --enable-source-maps" "{{caxa}}/node_modules/ironfish/bin/run"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: ironfish-${{ matrix.settings.system }}-${{ matrix.settings.arch }}
-          path: ${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} 
-          if-no-files-found: error
+      - name: chmod executable
+        working-directory: ${{ runner.temp }}/iron/binary
+        run: chmod +x  ${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }}
+
+      - name: Deploy Binary to R2
+        run: ./ironfish-cli/scripts/deploy-binary.sh ${{ runner.temp }}/iron/binary/${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }} ${{ env.PACKAGE_VERSION }}/${{ matrix.settings.system }}_${{ matrix.settings.arch }}/${{ matrix.settings.system != 'windows' && 'ironfish' || 'ironfish.exe' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+
+      # - uses: shallwefootball/upload-s3-action@v1.3.3
+      #   name: Upload Cloudflare R2
+      #   with:
+      #     endpoint: ${{ secrets.R2_ENDPOINT }}
+      #     aws_key_id: ${{ secrets.R2_ACCESS_KEY_ID }}
+      #     aws_secret_access_key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      #     aws_bucket: release
+      #     source_dir: '${{ runner.temp }}/iron/binary'
+      #     destination_dir: '${{ env.PACKAGE_VERSION }}/${{ matrix.settings.system }}_${{ matrix.settings.arch }}'
+      
+      # - uses: shallwefootball/upload-s3-action@v1.3.3
+      #   name: Upload Cloudflare R2 latest
+      #   with:
+      #     endpoint: ${{ secrets.R2_ENDPOINT }}
+      #     aws_key_id: ${{ secrets.R2_ACCESS_KEY_ID }}
+      #     aws_secret_access_key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      #     aws_bucket: release
+      #     source_dir: '${{ runner.temp }}/iron/binary'
+      #     destination_dir: 'latest/${{ matrix.settings.system }}_${{ matrix.settings.arch }}'
